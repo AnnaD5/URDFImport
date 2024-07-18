@@ -1,4 +1,4 @@
-#Try basic function (ie if can find robot file, print "found file")
+
 import logging
 import os
 from typing import Annotated, Optional
@@ -302,16 +302,21 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         """Run processing when user clicks "Apply" button."""
         import SampleData
-        a = self.ui.DirectoryButton.directory
+        # Gets paths for the robot and the directory of mesh files from user input
+        robotPath = self.ui.robotFilePath.currentPath
+        meshFolder = self.ui.meshesDirectoryButton.directory
+        print(robotPath)
+        print(meshFolder)
         downloadedFolder = SampleData.downloadFromURL(
             fileNames="RobotDescription.zip",
             uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
         rootPath = downloadedFolder + "/franka_panda_description-master" # root path for models
-        urdfFilePath = rootPath + "/robots/panda_arm.urdf"
+        #urdfFilePath = paths
+        #rootPath + "/robots/panda_arm.urdf"
         # Parse robot description file   
         import xml.etree.ElementTree as ET
         # Parse XML data from a file
-        tree = ET.parse(urdfFilePath)
+        tree = ET.parse(robotPath)
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
@@ -323,8 +328,10 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             name = link.get("name")
             if link.tag == "link":
                 try:
-
-                    stlFilePath = rootPath + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
+                    
+                    stlFilePath = meshFolder + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
+                    print(stlFilePath)
+                    #rootPath + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
                     print("mesh found")
                     # Use RAS coordinate system to avoid model conversion from LPS to RAS (we can transform the entire robot as a whole later if needed)
                     modelNode = slicer.modules.models.logic().AddModel(stlFilePath, slicer.vtkMRMLStorageNode.CoordinateSystemRAS)
@@ -370,7 +377,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         else:
                             raise ValueError(f"Unsupported rotation axis {axis}")
                     elif link.get("type") == "continuous":
-                        #continuousAxis = [float(x) for x in link.find("axis").get("xyz").split()]
+                        
                         if axis == [1, 0, 0] or axis == [-1, 0, 0]:
                             displayNode.SetRotationHandleComponentVisibility3D(True, False, False, False)
                         elif axis == [0, 1, 0] or axis == [0, -1, 0]:
@@ -387,7 +394,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                             displayNode.SetTranslationHandleComponentVisibility3D(True, False, False, False)
                         elif axis == [0, 1, 0] or axis == [0, -1, 0]:
                             displayNode.SetTranslationHandleComponentVisibility3D(False, True, False, False)
-                        elif axis == [0, 1, 0] or axis == [0, 0, -1]:
+                        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
                             displayNode.SetTranslationHandleComponentVisibility3D(False, False, True, False)
                         else:
                             raise ValueError(f"Unsupported prismatic axis {axis}")
@@ -397,7 +404,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         displayNode.SetRotationHandleComponentVisibility3D(True, True, True, False) #check this last one - should it stay as false
                         displayNode.SetTranslationHandleComponentVisibility3D(True, True, True, False) #what is this last one if the first 3 are x, y, z
                     #elif link.get("type") == "planar":
-                        # TODO: implement planar joint -- I think a lot of issues will probably arise here, what does planar actually do
+                        # TODO: implement planar joint
                     else:
                         # TODO: implement translation and other joint types
                         raise ValueError(f"Unsupported joint type {link.get('type')}")
@@ -405,19 +412,6 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         connectNodes(nodes)
                 
         
-    
-    """ with slicer.util.tryWithErrorDisplay(_("Failed to compute results."), waitCursor=True):
-            # Compute output
-            self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-                               self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-            # Compute inverted output (if needed)
-            if self.ui.invertedOutputSelector.currentNode():
-                # If additional output volume is selected then result with inverted threshold is written there
-                self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-                                   self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
-"""
             
 
 #
