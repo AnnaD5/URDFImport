@@ -95,9 +95,6 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
         nodeNames="MyFirstModule2",
     )
 """
-
-#def loadRobotMesh(path):
-
     
 
 
@@ -128,11 +125,12 @@ def makeNodeHierarchy(nodes, robot):
             jointToParentTransformNode.SetAndObserveTransformNodeID(parent["model"].GetTransformNodeID())
             # <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
             transformToParent = vtk.vtkTransform()
-            rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in joint.find("origin").get("rpy").split()]
+            rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in joint.find("origin").get("rpy").split()]  
             xyz = [float(x) for x in joint.find("origin").get("xyz").split()]
-            transformToParent.Translate(xyz)
-            transformToParent.RotateY(rpy[1])
+            myXYZ = [xyz[0], xyz[1], xyz[2]]
+            transformToParent.Translate(myXYZ)
             transformToParent.RotateX(rpy[0])
+            transformToParent.RotateY(rpy[1])
             transformToParent.RotateZ(rpy[2])
             jointToParentTransformNode.SetMatrixTransformToParent(transformToParent.GetMatrix())
             nodes[name]["transform"].SetAndObserveTransformNodeID(jointToParentTransformNode.GetID())
@@ -307,10 +305,10 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         meshFolder = self.ui.meshesDirectoryButton.directory
         print(robotPath)
         print(meshFolder)
-        downloadedFolder = SampleData.downloadFromURL(
-            fileNames="RobotDescription.zip",
-            uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
-        rootPath = downloadedFolder + "/franka_panda_description-master" # root path for models
+        #downloadedFolder = SampleData.downloadFromURL(
+            #fileNames="RobotDescription.zip",
+            #uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
+        #rootPath = downloadedFolder + "/franka_panda_description-master" # root path for models
         #urdfFilePath = paths
         #rootPath + "/robots/panda_arm.urdf"
         # Parse robot description file   
@@ -327,9 +325,8 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         for link in robot:
             name = link.get("name")
             if link.tag == "link":
-                try:
-                    
-                    stlFilePath = meshFolder + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
+                try: 
+                    stlFilePath = meshFolder + '/' + link.find('visual').find('geometry').find('mesh').attrib["filename"]
                     print(stlFilePath)
                     #rootPath + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
                     print("mesh found")
