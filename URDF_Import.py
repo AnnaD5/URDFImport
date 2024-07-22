@@ -21,7 +21,8 @@ from slicer import vtkMRMLScalarVolumeNode
 #
 # URDF_Import
 #
-
+#TODO: ask about incorporating URDF to XACRO with someone else's script - what credit is necessary
+#TODO: go through xacro2urdf code and see how to remove the package//: in the new files - maybe look for filename
 
 class URDF_Import(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -262,6 +263,12 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         meshFolder = self.ui.meshesDirectoryButton.directory
         print(robotPath)
         print(meshFolder)
+        #TODO: 
+        """ TODO: something like
+        if(robotPath ending is xacro):
+            use script to change to urdf
+            also in script change the filename thing
+        """
         #downloadedFolder = SampleData.downloadFromURL(
             #fileNames="RobotDescription.zip",
             #uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
@@ -272,6 +279,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         import xml.etree.ElementTree as ET
         # Parse XML data from a file
         tree = ET.parse(robotPath)
+        print("tree" + tree) #TODO: check how this works for path file thing
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
