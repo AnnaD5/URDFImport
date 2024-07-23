@@ -113,6 +113,60 @@ def setLimits(link):
 #def xacroToUrdf():
     #TODO: incorporate code from xacro2urdf github possibly 
 
+def makeLinks(link, node):
+    if not link.get("type") == "floating":
+        if(link.find("axis") == None):
+            axis = [1, 0, 0]
+        else:
+            axis = [float(x) for x in link.find("axis").get("xyz").split()]
+    if link.get("type") == "revolute":
+        #<axis xyz="0 0 1"/>
+        #rotationAxis = [float(x) for x in link.find("axis").get("xyz").split()]
+        setLimits(link)
+
+        #what to do with these limits?
+
+        if axis == [1, 0, 0] or axis == [-1, 0, 0]:
+            node.SetRotationHandleComponentVisibility3D(True, False, False, False)
+        elif axis == [0, 1, 0] or axis == [0, -1, 0]:
+            node.SetRotationHandleComponentVisibility3D(False, True, False, False)
+        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
+            node.SetRotationHandleComponentVisibility3D(False, False, True, False)
+        else:
+            raise ValueError(f"Unsupported rotation axis {axis}")
+    elif link.get("type") == "continuous":
+                        
+        if axis == [1, 0, 0] or axis == [-1, 0, 0]:
+            node.SetRotationHandleComponentVisibility3D(True, False, False, False)
+        elif axis == [0, 1, 0] or axis == [0, -1, 0]:
+            node.SetRotationHandleComponentVisibility3D(False, True, False, False)
+        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
+            node.SetRotationHandleComponentVisibility3D(False, False, True, False)
+        else:
+            raise ValueError(f"Unsupported continuous axis {axis}")
+    elif link.get("type") == "prismatic":
+        # TODO: implement prismatic joint
+        node.SetEditorTranslationEnabled(True)
+        node.SetEditorRotationEnabled(False)
+        if axis == [1, 0, 0] or axis == [-1, 0, 0]:
+            node.SetTranslationHandleComponentVisibility3D(True, False, False, False)
+        elif axis == [0, 1, 0] or axis == [0, -1, 0]:
+            node.SetTranslationHandleComponentVisibility3D(False, True, False, False)
+        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
+            node.SetTranslationHandleComponentVisibility3D(False, False, True, False)
+        else:
+            raise ValueError(f"Unsupported prismatic axis {axis}")
+    elif link.get("type") == "floating":
+        # TODO: implement floating joint
+        node.SetEditorTranslationEnabled(True)
+        node.SetRotationHandleComponentVisibility3D(True, True, True, False) #check this last one - should it stay as false
+        node.SetTranslationHandleComponentVisibility3D(True, True, True, False) #what is this last one if the first 3 are x, y, z
+    #elif link.get("type") == "planar":
+        # TODO: implement planar joint
+    else:
+        # TODO: implement translation and other joint types
+        raise ValueError(f"Unsupported joint type {link.get('type')}")
+
 #
 # URDF_ImportParameterNode
 #
@@ -327,58 +381,9 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     displayNode.SetEditorVisibility(True)
                     displayNode.SetEditorSliceIntersectionVisibility(False)
                     displayNode.SetEditorTranslationEnabled(False)
-                    if not link.get("type") == "floating":
-                        if(link.find("axis") == None):
-                            axis = [1, 0, 0]
-                        else:
-                            axis = [float(x) for x in link.find("axis").get("xyz").split()]
-                    if link.get("type") == "revolute":
-                        #<axis xyz="0 0 1"/>
-                        #rotationAxis = [float(x) for x in link.find("axis").get("xyz").split()]
-                        setLimits(link)
-
-                        #what to do with these limits?
-
-                        if axis == [1, 0, 0] or axis == [-1, 0, 0]:
-                            displayNode.SetRotationHandleComponentVisibility3D(True, False, False, False)
-                        elif axis == [0, 1, 0] or axis == [0, -1, 0]:
-                            displayNode.SetRotationHandleComponentVisibility3D(False, True, False, False)
-                        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
-                            displayNode.SetRotationHandleComponentVisibility3D(False, False, True, False)
-                        else:
-                            raise ValueError(f"Unsupported rotation axis {axis}")
-                    elif link.get("type") == "continuous":
-                        
-                        if axis == [1, 0, 0] or axis == [-1, 0, 0]:
-                            displayNode.SetRotationHandleComponentVisibility3D(True, False, False, False)
-                        elif axis == [0, 1, 0] or axis == [0, -1, 0]:
-                            displayNode.SetRotationHandleComponentVisibility3D(False, True, False, False)
-                        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
-                            displayNode.SetRotationHandleComponentVisibility3D(False, False, True, False)
-                        else:
-                            raise ValueError(f"Unsupported continuous axis {axis}")
-                    elif link.get("type") == "prismatic":
-                        # TODO: implement prismatic joint
-                        displayNode.SetEditorTranslationEnabled(True)
-                        displayNode.SetEditorRotationEnabled(False)
-                        if axis == [1, 0, 0] or axis == [-1, 0, 0]:
-                            displayNode.SetTranslationHandleComponentVisibility3D(True, False, False, False)
-                        elif axis == [0, 1, 0] or axis == [0, -1, 0]:
-                            displayNode.SetTranslationHandleComponentVisibility3D(False, True, False, False)
-                        elif axis == [0, 0, 1] or axis == [0, 0, -1]:
-                            displayNode.SetTranslationHandleComponentVisibility3D(False, False, True, False)
-                        else:
-                            raise ValueError(f"Unsupported prismatic axis {axis}")
-                    elif link.get("type") == "floating":
-                        # TODO: implement floating joint
-                        displayNode.SetEditorTranslationEnabled(True)
-                        displayNode.SetRotationHandleComponentVisibility3D(True, True, True, False) #check this last one - should it stay as false
-                        displayNode.SetTranslationHandleComponentVisibility3D(True, True, True, False) #what is this last one if the first 3 are x, y, z
-                    #elif link.get("type") == "planar":
-                        # TODO: implement planar joint
-                    else:
-                        # TODO: implement translation and other joint types
-                        raise ValueError(f"Unsupported joint type {link.get('type')}")
+                    makeLinks(link.get("type"), displayNode)
+                    #everything from makeLinks was here
+                    
         makeNodeHierarchy(nodes, robot)
         connectNodes(nodes, scaleIsM)
                 
