@@ -21,7 +21,7 @@ from slicer import vtkMRMLScalarVolumeNode
 #
 # URDF_Import
 #
-
+#TODO: ask about incorporating XACRO to URDF script - what credit is required
 
 class URDF_Import(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -98,10 +98,11 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
     
 
 
-def connectNodes(nodes):
+def connectNodes(nodes, scaleTrans):
         robotToWorldTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "Robot")
         robotToWorldTransform = vtk.vtkTransform()
-        robotToWorldTransform.Scale(1000, 1000, 1000)  # convert from meters (URDF) to millimeters (Slicer)
+        if scaleTrans:
+            robotToWorldTransform.Scale(1000, 1000, 1000)  # convert from meters (URDF) to millimeters (Slicer)
         robotToWorldTransformNode.SetMatrixTransformToParent(robotToWorldTransform.GetMatrix())
         for nodeName in nodes:
             if nodes[nodeName]["type"] == "link":
@@ -150,6 +151,8 @@ def setLimits(link):
     if link.find("limit").get("upper") != None:
         upperLimit = link.find("limit").get("upper")
 
+#def xacroToUrdf():
+    #TODO: incorporate code from xacro2urdf github possibly 
 
 #
 # URDF_ImportParameterNode
@@ -299,12 +302,11 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onApplyButton(self) -> None:
 
         """Run processing when user clicks "Apply" button."""
-        import SampleData
+       # import SampleData
         # Gets paths for the robot and the directory of mesh files from user input
         robotPath = self.ui.robotFilePath.currentPath
         meshFolder = self.ui.meshesDirectoryButton.directory
-        print(robotPath)
-        print(meshFolder)
+        scaleIsM = self.ui.scaleRobotFileM.checked
         #downloadedFolder = SampleData.downloadFromURL(
             #fileNames="RobotDescription.zip",
             #uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
@@ -406,7 +408,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         # TODO: implement translation and other joint types
                         raise ValueError(f"Unsupported joint type {link.get('type')}")
         makeNodeHierarchy(nodes, robot)
-        connectNodes(nodes)
+        connectNodes(nodes, scaleIsM)
                 
         
             
