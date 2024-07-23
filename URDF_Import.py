@@ -21,9 +21,9 @@ from slicer import vtkMRMLScalarVolumeNode
 #
 # URDF_Import
 #
+
 #TODO: ask about incorporating URDF to XACRO with someone else's script - what credit is necessary
 #TODO: go through xacro2urdf code and see how to remove the package//: in the new files - maybe look for filename
-#TODO: ask about incorporating XACRO to URDF script - what credit is required
 
 class URDF_Import(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -261,11 +261,12 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onApplyButton(self) -> None:
 
         """Run processing when user clicks "Apply" button."""
-       # import SampleData
+        import SampleData
         # Gets paths for the robot and the directory of mesh files from user input
         robotPath = self.ui.robotFilePath.currentPath
         meshFolder = self.ui.meshesDirectoryButton.directory
         scaleIsM = self.ui.scaleRobotFileM.checked
+        useCollisionMesh = self.ui.collisionMeshCheck.checked
         print(robotPath)
         print(meshFolder)
         #TODO: 
@@ -284,7 +285,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         import xml.etree.ElementTree as ET
         # Parse XML data from a file
         tree = ET.parse(robotPath)
-        print("tree" + tree) #TODO: check how this works for path file thing
+        #print("tree" + tree.str()) #TODO: check how this works for path file thing
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
@@ -296,7 +297,10 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             name = link.get("name")
             if link.tag == "link":
                 try: 
-                    stlFilePath = meshFolder + '/' + link.find('visual').find('geometry').find('mesh').attrib["filename"]
+                    if useCollisionMesh:
+                        stlFilePath = meshFolder + '/' + link.find('collision').find('geometry').find('mesh').attrib["filename"]
+                    else:
+                        stlFilePath = meshFolder + '/' + link.find('visual').find('geometry').find('mesh').attrib["filename"]
                     print(stlFilePath)
                     #rootPath + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
                     print("mesh found")
