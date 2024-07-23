@@ -21,6 +21,8 @@ from slicer import vtkMRMLScalarVolumeNode
 #
 # URDF_Import
 #
+#TODO: ask about incorporating URDF to XACRO with someone else's script - what credit is necessary
+#TODO: go through xacro2urdf code and see how to remove the package//: in the new files - maybe look for filename
 #TODO: ask about incorporating XACRO to URDF script - what credit is required
 
 class URDF_Import(ScriptedLoadableModule):
@@ -51,50 +53,7 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
     #    slicer.app.connect("startupCompleted()", registerSampleData)
 
 
-"""def registerSampleData():
-    #Add data sets to Sample Data module.
-    # It is always recommended to provide sample data for users to make it easy to try the module,
-    # but if no sample data is available then this method (and associated startupCompeted signal connection) can be removed.
 
-    import SampleData
-
-    iconsPath = os.path.join(os.path.dirname(__file__), "Resources/Icons")
-
-    # To ensure that the source code repository remains small (can be downloaded and installed quickly)
-    # it is recommended to store data sets that are larger than a few MB in a Github release.
-
-    # MyFirstModule1
-    SampleData.SampleDataLogic.registerCustomSampleDataSource(
-        # Category and sample name displayed in Sample Data module
-        category="MyFirstModule",
-        sampleName="MyFirstModule1",
-        # Thumbnail should have size of approximately 260x280 pixels and stored in Resources/Icons folder.
-        # It can be created by Screen Capture module, "Capture all views" option enabled, "Number of images" set to "Single".
-        thumbnailFileName=os.path.join(iconsPath, "MyFirstModule1.png"),
-        # Download URL and target file name
-        uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-        fileNames="MyFirstModule1.nrrd",
-        # Checksum to ensure file integrity. Can be computed by this command:
-        #  import hashlib; print(hashlib.sha256(open(filename, "rb").read()).hexdigest())
-        checksums="SHA256:998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-        # This node name will be used when the data set is loaded
-        nodeNames="MyFirstModule1",
-    )
-
-    # MyFirstModule2
-    SampleData.SampleDataLogic.registerCustomSampleDataSource(
-        # Category and sample name displayed in Sample Data module
-        category="MyFirstModule",
-        sampleName="MyFirstModule2",
-        thumbnailFileName=os.path.join(iconsPath, "MyFirstModule2.png"),
-        # Download URL and target file name
-        uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-        fileNames="MyFirstModule2.nrrd",
-        checksums="SHA256:1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-        # This node name will be used when the data set is loaded
-        nodeNames="MyFirstModule2",
-    )
-"""
     
 
 
@@ -307,6 +266,14 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         robotPath = self.ui.robotFilePath.currentPath
         meshFolder = self.ui.meshesDirectoryButton.directory
         scaleIsM = self.ui.scaleRobotFileM.checked
+        print(robotPath)
+        print(meshFolder)
+        #TODO: 
+        """ TODO: something like
+        if(robotPath ending is xacro):
+            use script to change to urdf
+            also in script change the filename thing
+        """
         #downloadedFolder = SampleData.downloadFromURL(
             #fileNames="RobotDescription.zip",
             #uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
@@ -317,6 +284,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         import xml.etree.ElementTree as ET
         # Parse XML data from a file
         tree = ET.parse(robotPath)
+        print("tree" + tree) #TODO: check how this works for path file thing
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
