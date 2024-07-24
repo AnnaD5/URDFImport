@@ -2,6 +2,7 @@
 import logging
 import os
 from typing import Annotated, Optional
+import pathlib
 
 import vtk
 
@@ -70,6 +71,32 @@ def connectNodes(nodes, scaleTrans):
                 node = nodes[nodeName]["transform"]
             if not node.GetParentTransformNode():
                 node.SetAndObserveTransformNodeID(robotToWorldTransformNode.GetID())
+
+
+#TODO: change this to two separate position setups for model (meshes) and joints
+def setUpMeshes(link, nodes):
+       # something with this but to put them in place as well?
+    name = link.get("name")
+    transformModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
+    nodes[transformModelNode.GetName()] = { "type": "transform", "transform": transformModelNode}
+    transformModel = vtk.vtkTransform()
+    xyz = [float(x) for x in link.find("visual").find("origin").get("xyz").split()]
+    transformModel.Translate(xyz)
+    if(link.find("visual").find("origin").get("rpy") != None): 
+        print("doing rpy")
+        rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in link.find("visual").find("origin").get("rpy").split()]  
+        transformModel.RotateX(rpy[0])
+        transformModel.RotateY(rpy[1])
+        transformModel.RotateZ(rpy[2])
+    transformModelNode.SetMatrixTransformToParent(transformModel.GetMatrix())
+    nodes[name]["model"].SetAndObserveTransformNodeID(transformModelNode.GetID())
+       # use this but with the xyz and rpy for the models themselves?
+
+    
+    
+
+
+#makes hierarchy for nodes and transforms joints based on given translation 
 
 def makeNodeHierarchy(nodes, robot):
     for joint in robot.findall("joint"):
@@ -145,7 +172,6 @@ def makeLinks(link, node):
         else:
             raise ValueError(f"Unsupported continuous axis {axis}")
     elif link.get("type") == "prismatic":
-        # TODO: implement prismatic joint
         node.SetEditorTranslationEnabled(True)
         node.SetEditorRotationEnabled(False)
         if axis == [1, 0, 0] or axis == [-1, 0, 0]:
@@ -321,11 +347,13 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         meshFolder = self.ui.meshesDirectoryButton.directory
         scaleIsM = self.ui.scaleRobotFileM.checked
         useCollisionMesh = self.ui.collisionMeshCheck.checked
+        pathExt = pathlib.Path(robotPath).suffix #find suffix to tell if file is URDF or xacro
+        print(pathExt)
         print(robotPath)
-        print(meshFolder)
-        #TODO: 
+        print(meshFolder) 
         """ TODO: something like
-        if(robotPath ending is xacro):
+        if(pathExt == ".xacro"):
+            robotPath = xacroToUrdf(robotPath)
             use script to change to urdf
             also in script change the filename thing
         """
@@ -337,9 +365,9 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         #rootPath + "/robots/panda_arm.urdf"
         # Parse robot description file   
         import xml.etree.ElementTree as ET
+
         # Parse XML data from a file
         tree = ET.parse(robotPath)
-        #print("tree" + tree.str()) #TODO: check how this works for path file thing
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
@@ -347,6 +375,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             print("robot successful!")
         
         nodes = {}
+        #add link transform nodes?
         for link in robot:
             name = link.get("name")
             if link.tag == "link":
@@ -368,6 +397,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     modelNode = slicer.modules.models.logic().AddModel(sphere.GetOutputPort())
                 modelNode.SetName(name)
                 nodes[name] = { "type": "link", "model": modelNode}
+                setUpMeshes(link, nodes)
             elif link.tag == "joint":
                 jointTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", name)
                 nodes[name] = { "type": "joint", "transform": jointTransformNode}
@@ -381,7 +411,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     displayNode.SetEditorVisibility(True)
                     displayNode.SetEditorSliceIntersectionVisibility(False)
                     displayNode.SetEditorTranslationEnabled(False)
-                    makeLinks(link.get("type"), displayNode)
+                    makeLinks(link, displayNode)
                     #everything from makeLinks was here
                     
         makeNodeHierarchy(nodes, robot)
