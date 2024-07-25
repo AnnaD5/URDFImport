@@ -74,23 +74,30 @@ def connectNodes(nodes, scaleTrans):
 
 
 #TODO: change this to two separate position setups for model (meshes) and joints
-def setUpMeshes(link, nodes):
+#use ApplyTransform?
+def setUpMeshes(link, nodes, model):
        # something with this but to put them in place as well?
-    name = link.get("name")
-    transformModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode")
-    nodes[transformModelNode.GetName()] = { "type": "transform", "transform": transformModelNode}
-    transformModel = vtk.vtkTransform()
-    xyz = [float(x) for x in link.find("visual").find("origin").get("xyz").split()]
-    transformModel.Translate(xyz)
-    if(link.find("visual").find("origin").get("rpy") != None): 
-        print("doing rpy")
-        rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in link.find("visual").find("origin").get("rpy").split()]  
-        transformModel.RotateX(rpy[0])
-        transformModel.RotateY(rpy[1])
-        transformModel.RotateZ(rpy[2])
-    transformModelNode.SetMatrixTransformToParent(transformModel.GetMatrix())
-    nodes[name]["model"].SetAndObserveTransformNodeID(transformModelNode.GetID())
-       # use this but with the xyz and rpy for the models themselves?
+    if link.find("visual") != None:
+        if link.find("visual").find("origin") != None:
+            name = link.get("name")
+            usedNode = nodes[name]
+            transformModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"{name} to world")
+            nodes[transformModelNode.GetName()] = { "type": "transform", "transform": transformModelNode}
+            transformModelNode.SetAndObserveTransformNodeID(usedNode["model"].GetTransformNodeID())
+            print(transformModelNode)
+            transformModel = vtk.vtkTransform()
+            xyz = [float(x) for x in link.find("visual").find("origin").get("xyz").split()]
+            transformModel.Translate(xyz)
+            if(link.find("visual").find("origin").get("rpy") != None): 
+                print("doing rpy")
+                rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in link.find("visual").find("origin").get("rpy").split()]  
+                transformModel.RotateX(rpy[0])
+                transformModel.RotateY(rpy[1])
+                transformModel.RotateZ(rpy[2])
+            transformModelNode.SetMatrixTransformToParent(transformModel.GetMatrix())
+            nodes[name]["model"].SetAndObserveTransformNodeID(transformModelNode.GetID())
+            model.ApplyTransform(transformModel)
+        # use this but with the xyz and rpy for the models themselves?
 
     
     
@@ -105,11 +112,14 @@ def makeNodeHierarchy(nodes, robot):
         parentName = joint.find("parent").get("link")
         if parentName:
             parent = nodes[parentName]
+            print(nodes)
             if parent["type"] != "link":
                 raise ValueError(f"Parent of joint {name} is not a link")
             jointToParentTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"{name} to {parentName}")
             nodes[jointToParentTransformNode.GetName()] = { "type": "transform", "transform": jointToParentTransformNode}
             jointToParentTransformNode.SetAndObserveTransformNodeID(parent["model"].GetTransformNodeID())
+             #this is the step to replicate in the other method ^
+            print(jointToParentTransformNode)
             # <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
             transformToParent = vtk.vtkTransform()
             rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in joint.find("origin").get("rpy").split()]  
@@ -397,7 +407,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     modelNode = slicer.modules.models.logic().AddModel(sphere.GetOutputPort())
                 modelNode.SetName(name)
                 nodes[name] = { "type": "link", "model": modelNode}
-                setUpMeshes(link, nodes)
+                setUpMeshes(link, nodes, modelNode)
             elif link.tag == "joint":
                 jointTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", name)
                 nodes[name] = { "type": "joint", "transform": jointTransformNode}
