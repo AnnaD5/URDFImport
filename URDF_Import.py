@@ -84,12 +84,12 @@ def setUpMeshes(link, nodes, model):
             transformModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"{name} to world")
             nodes[transformModelNode.GetName()] = { "type": "transform", "transform": transformModelNode}
             transformModelNode.SetAndObserveTransformNodeID(usedNode["model"].GetTransformNodeID())
-            print(transformModelNode)
+            #print(transformModelNode)
             transformModel = vtk.vtkTransform()
             xyz = [float(x) for x in link.find("visual").find("origin").get("xyz").split()]
             transformModel.Translate(xyz)
             if(link.find("visual").find("origin").get("rpy") != None): 
-                print("doing rpy")
+                #print("doing rpy")
                 rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in link.find("visual").find("origin").get("rpy").split()]  
                 transformModel.RotateX(rpy[0])
                 transformModel.RotateY(rpy[1])
@@ -112,14 +112,14 @@ def makeNodeHierarchy(nodes, robot):
         parentName = joint.find("parent").get("link")
         if parentName:
             parent = nodes[parentName]
-            print(nodes)
+            #print(nodes)
             if parent["type"] != "link":
                 raise ValueError(f"Parent of joint {name} is not a link")
             jointToParentTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"{name} to {parentName}")
             nodes[jointToParentTransformNode.GetName()] = { "type": "transform", "transform": jointToParentTransformNode}
             jointToParentTransformNode.SetAndObserveTransformNodeID(parent["model"].GetTransformNodeID())
              #this is the step to replicate in the other method ^
-            print(jointToParentTransformNode)
+            #print(jointToParentTransformNode)
             # <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
             transformToParent = vtk.vtkTransform()
             rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in joint.find("origin").get("rpy").split()]  
@@ -270,6 +270,9 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+        # Observer for transforms to keep in specified limits
+        #self.addObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, )
+
         # Buttons
         self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
         self.ui.clearButton.connect("clicked(bool)", self.onClearButton)
@@ -349,18 +352,43 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.mrmlScene.Clear()
 
     def onApplyButton(self) -> None:
+        self.logic.process(self.ui.robotFilePath.currentPath, self.ui.meshesDirectoryButton.directory,
+                self.ui.scaleRobotFileM.checked, self.ui.collisionMeshCheck.checked)
+    
+        
+            
 
-        """Run processing when user clicks "Apply" button."""
+#
+# URDF_ImportThresholdLogic
+#
+
+
+class URDF_ImportLogic(ScriptedLoadableModuleLogic):
+    """This class should implement all the actual
+    computation done by your module.  The interface
+    should be such that other python code can import
+    this class and make use of the functionality without
+    requiring an instance of the Widget.
+    Uses ScriptedLoadableModuleLogic base class, available at:
+    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
+    """
+
+    def __init__(self) -> None:
+        """Called when the logic class is instantiated. Can be used for initializing member variables."""
+        ScriptedLoadableModuleLogic.__init__(self)
+
+    def getParameterNode(self):
+        return URDF_ImportParameterNode(super().getParameterNode())
+
+    def process(self, robotPath, meshFolder, scaleIsM, useCollisionMesh) -> None:
+        
         import SampleData
         # Gets paths for the robot and the directory of mesh files from user input
-        robotPath = self.ui.robotFilePath.currentPath
-        meshFolder = self.ui.meshesDirectoryButton.directory
-        scaleIsM = self.ui.scaleRobotFileM.checked
-        useCollisionMesh = self.ui.collisionMeshCheck.checked
+        
         pathExt = pathlib.Path(robotPath).suffix #find suffix to tell if file is URDF or xacro
-        print(pathExt)
-        print(robotPath)
-        print(meshFolder) 
+        #print(pathExt)
+        #print(robotPath)
+        #print(meshFolder) 
         """ TODO: something like
         if(pathExt == ".xacro"):
             robotPath = xacroToUrdf(robotPath)
@@ -381,8 +409,6 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
-        else:
-            print("robot successful!")
         
         nodes = {}
         #add link transform nodes?
@@ -394,9 +420,9 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         stlFilePath = meshFolder + '/' + link.find('collision').find('geometry').find('mesh').attrib["filename"]
                     else:
                         stlFilePath = meshFolder + '/' + link.find('visual').find('geometry').find('mesh').attrib["filename"]
-                    print(stlFilePath)
+                    #print(stlFilePath)
                     #rootPath + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
-                    print("mesh found")
+                    #print("mesh found")
                     # Use RAS coordinate system to avoid model conversion from LPS to RAS (we can transform the entire robot as a whole later if needed)
                     modelNode = slicer.modules.models.logic().AddModel(stlFilePath, slicer.vtkMRMLStorageNode.CoordinateSystemRAS)
                 except:
@@ -426,69 +452,6 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     
         makeNodeHierarchy(nodes, robot)
         connectNodes(nodes, scaleIsM)
-                
-        
-            
-
-#
-# URDF_ImportThresholdLogic
-#
-
-
-class URDF_ImportLogic(ScriptedLoadableModuleLogic):
-    """This class should implement all the actual
-    computation done by your module.  The interface
-    should be such that other python code can import
-    this class and make use of the functionality without
-    requiring an instance of the Widget.
-    Uses ScriptedLoadableModuleLogic base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
-
-    def __init__(self) -> None:
-        """Called when the logic class is instantiated. Can be used for initializing member variables."""
-        ScriptedLoadableModuleLogic.__init__(self)
-
-    def getParameterNode(self):
-        return URDF_ImportParameterNode(super().getParameterNode())
-
-    def process(self,
-                inputVolume: vtkMRMLScalarVolumeNode,
-                outputVolume: vtkMRMLScalarVolumeNode,
-                imageThreshold: float,
-                invert: bool = False,
-                showResult: bool = True) -> None:
-        """
-        Run the processing algorithm.
-        Can be used without GUI widget.
-        :param inputVolume: volume to be thresholded
-        :param outputVolume: thresholding result
-        :param imageThreshold: values above/below this threshold will be set to 0
-        :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-        :param showResult: show output volume in slice viewers
-        """
-
-        if not inputVolume or not outputVolume:
-            raise ValueError("Input or output volume is invalid")
-
-        import time
-
-        startTime = time.time()
-        logging.info("Processing started")
-
-        # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-        cliParams = {
-            "InputVolume": inputVolume.GetID(),
-            "OutputVolume": outputVolume.GetID(),
-            "ThresholdValue": imageThreshold,
-            "ThresholdType": "Above" if invert else "Below",
-        }
-        cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-        # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-        slicer.mrmlScene.RemoveNode(cliNode)
-
-        stopTime = time.time()
-        logging.info(f"Processing completed in {stopTime-startTime:.2f} seconds")
 
     
 	
