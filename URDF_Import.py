@@ -1,5 +1,6 @@
 
 import logging
+import math
 import os
 from typing import Annotated, Optional
 import pathlib
@@ -59,24 +60,23 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
 
 
 def connectNodes(nodes, scaleTrans):
-        robotToWorldTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "Robot")
-        robotToWorldTransform = vtk.vtkTransform()
-        if scaleTrans:
-            robotToWorldTransform.Scale(1000, 1000, 1000)  # convert from meters (URDF) to millimeters (Slicer)
-        robotToWorldTransformNode.SetMatrixTransformToParent(robotToWorldTransform.GetMatrix())
-        for nodeName in nodes:
-            if nodes[nodeName]["type"] == "link":
-                node = nodes[nodeName]["model"]
-            elif nodes[nodeName]["type"] == "joint" or nodes[nodeName]["type"] == "transform":
-                node = nodes[nodeName]["transform"]
-            if not node.GetParentTransformNode():
-                node.SetAndObserveTransformNodeID(robotToWorldTransformNode.GetID())
+    robotToWorldTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "Robot")
+    robotToWorldTransform = vtk.vtkTransform()
+    if scaleTrans:
+        robotToWorldTransform.Scale(1000, 1000, 1000)  # convert from meters (URDF) to millimeters (Slicer)
+    robotToWorldTransformNode.SetMatrixTransformToParent(robotToWorldTransform.GetMatrix())
+    for nodeName in nodes:
+        if nodes[nodeName]["type"] == "link":
+            node = nodes[nodeName]["model"]
+        elif nodes[nodeName]["type"] == "joint" or nodes[nodeName]["type"] == "transform":
+            node = nodes[nodeName]["transform"]
+        if not node.GetParentTransformNode():
+            node.SetAndObserveTransformNodeID(robotToWorldTransformNode.GetID())
 
 
 #TODO: change this to two separate position setups for model (meshes) and joints
 #use ApplyTransform?
 def setUpMeshes(link, nodes, model):
-       # something with this but to put them in place as well?
     if link.find("visual") != None:
         if link.find("visual").find("origin") != None:
             name = link.get("name")
@@ -84,7 +84,6 @@ def setUpMeshes(link, nodes, model):
             transformModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"{name} to world")
             nodes[transformModelNode.GetName()] = { "type": "transform", "transform": transformModelNode}
             transformModelNode.SetAndObserveTransformNodeID(usedNode["model"].GetTransformNodeID())
-            #print(transformModelNode)
             transformModel = vtk.vtkTransform()
             xyz = [float(x) for x in link.find("visual").find("origin").get("xyz").split()]
             transformModel.Translate(xyz)
@@ -112,14 +111,11 @@ def makeNodeHierarchy(nodes, robot):
         parentName = joint.find("parent").get("link")
         if parentName:
             parent = nodes[parentName]
-            #print(nodes)
             if parent["type"] != "link":
                 raise ValueError(f"Parent of joint {name} is not a link")
             jointToParentTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"{name} to {parentName}")
             nodes[jointToParentTransformNode.GetName()] = { "type": "transform", "transform": jointToParentTransformNode}
             jointToParentTransformNode.SetAndObserveTransformNodeID(parent["model"].GetTransformNodeID())
-             #this is the step to replicate in the other method ^
-            #print(jointToParentTransformNode)
             # <origin rpy="-1.57079632679 0 0" xyz="0 0 0"/>
             transformToParent = vtk.vtkTransform()
             rpy = [vtk.vtkMath.DegreesFromRadians(float(x)) for x in joint.find("origin").get("rpy").split()]  
@@ -271,10 +267,10 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Observer for transforms to keep in specified limits
-        #self.addObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, )
+        #self.addObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onMoveNode)
 
         # Buttons
-        self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
+        self.ui.applyButton.connect("clicked(bool)", self.onLoadButton)
         self.ui.clearButton.connect("clicked(bool)", self.onClearButton)
         
 
@@ -296,7 +292,6 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
 
     def onSceneStartClose(self, caller, event) -> None:
         """Called just before the scene is closed."""
@@ -308,6 +303,14 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+    
+    """
+    def onMoveNode(self, caller, event) -> None:
+        #Notifies when node is moved - make separate for translation and rotation?
+        transformNode = caller
+        #replaces transform value with max value if going above max angle, prints message
+
+    """
 
     def initializeParameterNode(self) -> None:
         """Ensure parameter node exists and observed."""
@@ -330,28 +333,20 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
-            self._checkCanApply()
-
-    def _checkCanApply(self, caller=None, event=None) -> None:
-        self.ui.applyButton.enabled = True
-        #if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.thresholdedVolume:
-            #self.ui.applyButton.toolTip = _("Compute output volume")
-            #self.ui.applyButton.enabled = True
-        #else:
-            #self.ui.applyButton.toolTip = _("Select input and output volume nodes")
-            #self.ui.applyButton.enabled = False
-
+   
     def onClearButton(self) -> None:
         slicer.mrmlScene.Clear()
 
-    def onApplyButton(self) -> None:
+    def onLoadButton(self) -> None:
+        axisAngle = [0, 0, 0, 0]
+        matrix = ([.866, 0.5, 0], [-0.5, 0.866, 0], [0, 0, 1])
+        axisAngle = self.logic.matrixToAngle(matrix, axisAngle)
+        print(axisAngle)
         self.logic.process(self.ui.robotFilePath.currentPath, self.ui.meshesDirectoryButton.directory,
                 self.ui.scaleRobotFileM.checked, self.ui.collisionMeshCheck.checked)
     
@@ -359,7 +354,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             
 
 #
-# URDF_ImportThresholdLogic
+# URDF_ImportLogic
 #
 
 
@@ -380,27 +375,95 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
     def getParameterNode(self):
         return URDF_ImportParameterNode(super().getParameterNode())
 
+    
+    # Calculates axis angle representation from rotation matrix 
+    def matrixToAngle(self, m, axisAngle):
+        epsilon = 0.01 # margin to allow for rounding errors
+        epsilon2 = 0.1 # margin to distinguish between 0 and 180 degrees
+        # optional check that input is pure rotation, 'isRotationMatrix' is defined at:
+        # https://www.euclideanspace.com/maths/algebra/matrix/orthogonal/rotation/
+        #assert isRotationMatrix(m) : "not valid rotation matrix" // for debugging
+        if abs(m[0][1]-m[1][0]) < epsilon and abs(m[0][2]-m[2][0]) < epsilon and abs(m[1][2]-m[2][1])< epsilon:
+            # singularity found
+            # first check for identity matrix which must have +1 for all terms
+            #  in leading diagonaland zero in other terms
+            if abs(m[0][1]+m[1][0]) < epsilon2 and abs(m[0][2]+m[2][0]) < epsilon2 and abs(m[1][2]+m[2][1]) < epsilon2 and abs(m[0][0]+m[1][1]+m[2][2]-3) < epsilon2:
+
+                # this singularity is identity matrix so angle = 0
+                axisAngle = [0,1,0,0] # zero angle, arbitrary axis
+                print(axisAngle)
+                
+            else:
+            # otherwise this singularity is angle = 180
+                angle = math.pi
+                xx = (m[0][0]+1)/2
+                yy = (m[1][1]+1)/2
+                zz = (m[2][2]+1)/2
+                xy = (m[0][1]+m[1][0])/4
+                xz = (m[0][2]+m[2][0])/4
+                yz = (m[1][2]+m[2][1])/4
+                if xx > yy and xx > zz: # m[0][0] is the largest diagonal term
+                    if xx < epsilon:
+                        x = 0
+                        y = 0.7071
+                        z = 0.7071
+                    else:
+                        x = math.sqrt(xx)
+                        y = xy/x
+                        z = xz/x
+                elif yy > zz: # m[1][1] is the largest diagonal term
+                    if yy< epsilon:
+                        x = 0.7071
+                        y = 0
+                        z = 0.7071
+                    else:
+                        y = math.sqrt(yy)
+                        x = xy/y
+                        z = yz/y
+                else: # m[2][2] is the largest diagonal term so base result on this
+                    if zz< epsilon:
+                        x = 0.7071
+                        y = 0.7071
+                        z = 0
+                    else:
+                        z = math.sqrt(zz)
+                        x = xz/z
+                        y = yz/z
+
+                axisAngle = [angle,x,y,z] # return 180 deg rotation
+                print(axisAngle)
+        else:        
+        # as we have reached here there are no singularities so we can handle normally
+            s = math.sqrt((m[2][1] - m[1][2])*(m[2][1] - m[1][2])
+                +(m[0][2] - m[2][0])*(m[0][2] - m[2][0])
+                +(m[1][0] - m[0][1])*(m[1][0] - m[0][1])) # used to normalise
+            if abs(s) < 0.001:
+                s=1 
+                # prevent divide by zero, should not happen if matrix is orthogonal and should be
+                # caught by singularity test above, but I've left it in just in case
+            angle = math.acos(( m[0][0] + m[1][1] + m[2][2] - 1)/2)
+            x = (m[2][1] - m[1][2])/s
+            y = (m[0][2] - m[2][0])/s
+            z = (m[1][0] - m[0][1])/s
+            axisAngle = [angle,x,y,z]
+        return(axisAngle)
+
+	
+
+    
+
     def process(self, robotPath, meshFolder, scaleIsM, useCollisionMesh) -> None:
         
         import SampleData
         # Gets paths for the robot and the directory of mesh files from user input
         
         pathExt = pathlib.Path(robotPath).suffix #find suffix to tell if file is URDF or xacro
-        #print(pathExt)
-        #print(robotPath)
-        #print(meshFolder) 
         """ TODO: something like
         if(pathExt == ".xacro"):
             robotPath = xacroToUrdf(robotPath)
             use script to change to urdf
             also in script change the filename thing
         """
-        #downloadedFolder = SampleData.downloadFromURL(
-            #fileNames="RobotDescription.zip",
-            #uris="https://github.com/justagist/franka_panda_description/archive/refs/heads/master.zip")[0] #put the r2d2 file in here
-        #rootPath = downloadedFolder + "/franka_panda_description-master" # root path for models
-        #urdfFilePath = paths
-        #rootPath + "/robots/panda_arm.urdf"
         # Parse robot description file   
         import xml.etree.ElementTree as ET
 
@@ -420,9 +483,6 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                         stlFilePath = meshFolder + '/' + link.find('collision').find('geometry').find('mesh').attrib["filename"]
                     else:
                         stlFilePath = meshFolder + '/' + link.find('visual').find('geometry').find('mesh').attrib["filename"]
-                    #print(stlFilePath)
-                    #rootPath + "/" + link.find('collision').find('geometry').find('mesh').attrib["filename"]
-                    #print("mesh found")
                     # Use RAS coordinate system to avoid model conversion from LPS to RAS (we can transform the entire robot as a whole later if needed)
                     modelNode = slicer.modules.models.logic().AddModel(stlFilePath, slicer.vtkMRMLStorageNode.CoordinateSystemRAS)
                 except:
@@ -448,7 +508,6 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     displayNode.SetEditorSliceIntersectionVisibility(False)
                     displayNode.SetEditorTranslationEnabled(False)
                     makeLinks(link, displayNode)
-                    #everything from makeLinks was here
                     
         makeNodeHierarchy(nodes, robot)
         connectNodes(nodes, scaleIsM)
