@@ -4,7 +4,7 @@ import math
 import os
 from typing import Annotated, Optional
 import pathlib
-
+import xacro2urdf
 import vtk
 
 import slicer
@@ -474,26 +474,30 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
     def process(self, robotPath, meshFolder, scaleIsM, useCollisionMesh) -> None:
         
         import SampleData
+        import xml.etree.ElementTree as ET
         # Gets paths for the robot and the directory of mesh files from user input
         
         pathExt = pathlib.Path(robotPath).suffix #find suffix to tell if file is URDF or xacro
-        """ TODO: something like
+        # TODO: xacro to urdf conversions
         if(pathExt == ".xacro"):
-            robotPath = xacroToUrdf(robotPath)
-            use script to change to urdf
-            also in script change the filename thing
-        """
+            #robotPath = xacroToUrdf(robotPath)
+            robotFile = open(os.path.basename(robotPath) + '.urdf', "w")
+            print("this part completed")
+            robotFile.write(xacro2urdf.runProgram(robotPath))
+            print("this one done")
+            robotFile.close()
+            tree = ET.parse(robotFile)
+        else:
+            tree = ET.parse(robotPath)
         # Parse robot description file   
-        import xml.etree.ElementTree as ET
-
         # Parse XML data from a file
-        tree = ET.parse(robotPath)
+        
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
         
         nodes = {}
-        #add link transform nodes?
+
         for link in robot:
             name = link.get("name")
             if link.tag == "link":
