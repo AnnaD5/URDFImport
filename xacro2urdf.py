@@ -175,21 +175,22 @@ def child_elements(elt):
 
 all_includes = []
 ## @throws XacroException if a parsing error occurs with an included document
-def process_includes(doc): #base_dir
+def process_includes(doc, file): #base_dir
     namespaces = {}
     previous = doc.documentElement
     elt = next_element(previous)
     while elt:
         if elt.tagName == 'include' or elt.tagName == 'xacro:include':
-            print("elt.getAttribute('filename'):", elt.getAttribute('filename'))
+            """print("elt.getAttribute('filename'):", elt.getAttribute('filename'))
             filename = eval_text(elt.getAttribute('filename'), {})
-            print("filename:",filename)
-            if not os.path.isabs(filename):
-                filename = os.path.join(doc, filename)
+            print("filename:",filename)"""
+            """ if not os.path.isabs(filename):
+                filename = os.path.join(doc, filename)"""
             f = None
             try:
                 try:
-                    f = open(filename)
+                    f = open(file)
+                    print('file opened')
                 except IOError as e:
                     print(elt)
                     raise XacroException("included file \"%s\" could not be opened: %s" % (filename, str(e)))
@@ -518,7 +519,7 @@ def print_usage(exit_code = 0):
     sys.exit(exit_code)
 
 
-def runProgram(f):
+def runProgram(f, toWrite):
     # print("dir:",os.path.dirname(sys.argv[2]))
     # sys.exit(0)
     #try:
@@ -531,6 +532,7 @@ def runProgram(f):
     just_includes = False
 
     output = sys.stdout
+    output = open(toWrite, 'w')
     """for o, a in opts:
         if o == '-h':
             print_usage(0)
@@ -573,7 +575,7 @@ def runProgram(f):
     # print(opts, args)
     # print("dir:",os.path.dirname(sys.argv[2]))
     # sys.exit(0)
-    process_includes(doc) #os.path.dirname(sys.argv[2])
+   # process_includes(doc,f) #os.path.dirname(sys.argv[2])
     if just_deps:
         for inc in all_includes:
             sys.stdout.write(inc + " ")

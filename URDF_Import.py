@@ -6,6 +6,7 @@ from typing import Annotated, Optional
 import pathlib
 import xacro2urdf
 import vtk
+import numpy
 
 import slicer
 from slicer.i18n import tr as _
@@ -57,7 +58,7 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
 
 
     
-
+#Connects given nodes 
 
 def connectNodes(nodes, scaleTrans):
     robotToWorldTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "Robot")
@@ -74,8 +75,8 @@ def connectNodes(nodes, scaleTrans):
             node.SetAndObserveTransformNodeID(robotToWorldTransformNode.GetID())
 
 
-#TODO: change this to two separate position setups for model (meshes) and joints
-#use ApplyTransform?
+#Sets up positioning of model components from given xyz/rpy transformations in robot file
+
 def setUpMeshes(link, nodes, model):
     if link.find("visual") != None:
         if link.find("visual").find("origin") != None:
@@ -143,6 +144,8 @@ def setLowerLim(link, type):
             return link.find("limit").get("lower") * 1000
         else:
             return link.find("limit").get("lower")
+    else:
+        return None
 
 def setUpperLim(link, type):
     if link.find("limit").get("upper") != None:
@@ -150,7 +153,9 @@ def setUpperLim(link, type):
             return link.find("limit").get("upper") * 1000
         else:
             return link.find("limit").get("upper")
-#TODO: for transform, change limits to 1000x because slicer is in mm 
+    else:
+        return None
+#for transform, change limits to 1000x because slicer is in mm 
 #this is in radians for rotation and meters for translation
 
 #def xacroToUrdf():
@@ -165,8 +170,6 @@ def makeLinks(link, node):
     if link.get("type") == "revolute":
         #<axis xyz="0 0 1"/>
         #rotationAxis = [float(x) for x in link.find("axis").get("xyz").split()]
-        upperLim = setUpperLim(link, "rotate")
-        lowerLim = setLowerLim(link, "rotate")
         #TODO: use limits for observer nodes
 
         if axis == [1, 0, 0] or axis == [-1, 0, 0]:
@@ -188,8 +191,6 @@ def makeLinks(link, node):
         else:
             raise ValueError(f"Unsupported continuous axis {axis}")
     elif link.get("type") == "prismatic":
-        upperLim = setUpperLim(link, "translate")
-        lowerLim = setLowerLim(link, "translate")
         node.SetEditorTranslationEnabled(True)
         node.SetEditorRotationEnabled(False)
         if axis == [1, 0, 0] or axis == [-1, 0, 0]:
@@ -279,7 +280,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Observer for transforms to keep in specified limits
-        #self.addObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode)
+        #(node name).addObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode)
 
         # Buttons
         self.ui.applyButton.connect("clicked(bool)", self.onLoadButton)
@@ -316,7 +317,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self.parent.isEntered:
             self.initializeParameterNode()
     
-   
+    """
     #TODO: make this
     def onRotateNode(self, caller, upperLimit, lowerLimit, event) -> None:
         #Notifies when node is moved - make separate for translation and rotation?
@@ -328,7 +329,7 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             transformNode
 
         #replaces transform value with max value if going above max angle, prints message
-
+    """
     
 
     def initializeParameterNode(self) -> None:
@@ -362,9 +363,9 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.mrmlScene.Clear()
 
     def onLoadButton(self) -> None:
-        matrix = ([.866, 0.5, 0], [-0.5, 0.866, 0], [0, 0, 1])
-        axisAngle = self.logic.matrixToAngle(matrix)
-        print(axisAngle)
+        #matrix = ([.866, 0.5, 0], [-0.5, 0.866, 0], [0, 0, 1])
+        #axisAngle = self.logic.matrixToAngle(matrix)
+        #print(axisAngle)
         self.logic.process(self.ui.robotFilePath.currentPath, self.ui.meshesDirectoryButton.directory,
                 self.ui.scaleRobotFileM.checked, self.ui.collisionMeshCheck.checked)
     
@@ -402,11 +403,11 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         # optional check that input is pure rotation, 'isRotationMatrix' is defined at:
         # https://www.euclideanspace.com/maths/algebra/matrix/orthogonal/rotation/
         #assert isRotationMatrix(m) : "not valid rotation matrix" // for debugging
-        if abs(m[0][1]-m[1][0]) < epsilon and abs(m[0][2]-m[2][0]) < epsilon and abs(m[1][2]-m[2][1])< epsilon:
+        if abs(m.GetElement(0,1)-m.GetElement(1,0)) < epsilon and abs(m.GetElement(0,2)-m.GetElement(2,0)) < epsilon and abs(m.GetElement(1,2)-m.GetElement(2,1))< epsilon:
             # singularity found
             # first check for identity matrix which must have +1 for all terms
             #  in leading diagonaland zero in other terms
-            if abs(m[0][1]+m[1][0]) < epsilon2 and abs(m[0][2]+m[2][0]) < epsilon2 and abs(m[1][2]+m[2][1]) < epsilon2 and abs(m[0][0]+m[1][1]+m[2][2]-3) < epsilon2:
+            if abs(m.GetElement(0,1)+m.GetElement(1,0)) < epsilon2 and abs(m.GetElement(0,2)+m.GetElement(2,0)) < epsilon2 and abs(m.GetElement(1,2)+m.GetElement(2,1)) < epsilon2 and abs(m.GetElement(0,0)+m.GetElement(1,1)+m.GetElement(2,2)-3) < epsilon2:
 
                 # this singularity is identity matrix so angle = 0
                 axisAngle = [0,1,0,0] # zero angle, arbitrary axis
@@ -415,12 +416,12 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             else:
             # otherwise this singularity is angle = 180
                 angle = math.pi
-                xx = (m[0][0]+1)/2
-                yy = (m[1][1]+1)/2
-                zz = (m[2][2]+1)/2
-                xy = (m[0][1]+m[1][0])/4
-                xz = (m[0][2]+m[2][0])/4
-                yz = (m[1][2]+m[2][1])/4
+                xx = (m.GetElement(0,0)+1)/2
+                yy = (m.GetElement(1,1)+1)/2
+                zz = (m.GetElement(2,2)+1)/2
+                xy = (m.GetElement(0,1)+m.GetElement(1,0))/4
+                xz = (m.GetElement(0,2)+m.GetElement(2,0))/4
+                yz = (m.GetElement(1,2)+m.GetElement(2,1))/4
                 if xx > yy and xx > zz: # m[0][0] is the largest diagonal term
                     if xx < epsilon:
                         x = 0
@@ -453,23 +454,38 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                 print(axisAngle)
         else:        
         # as we have reached here there are no singularities so we can handle normally
-            s = math.sqrt((m[2][1] - m[1][2])*(m[2][1] - m[1][2])
-                +(m[0][2] - m[2][0])*(m[0][2] - m[2][0])
-                +(m[1][0] - m[0][1])*(m[1][0] - m[0][1])) # used to normalise
+            s = math.sqrt((m.GetElement(2,1) - m.GetElement(1,2))*(m.GetElement(2,1) - m.GetElement(1,2))
+                +(m.GetElement(0,2) - m.GetElement(2,0))*(m.GetElement(0,2)- m.GetElement(2,0))
+                +(m.GetElement(1,0) - m.GetElement(0,1))*(m.GetElement(1,0) - m.GetElement(0,1))) # used to normalise
             if abs(s) < 0.001:
                 s=1 
                 # prevent divide by zero, should not happen if matrix is orthogonal and should be
                 # caught by singularity test above, but I've left it in just in case
-            angle = math.acos(( m[0][0] + m[1][1] + m[2][2] - 1)/2)
-            x = (m[2][1] - m[1][2])/s
-            y = (m[0][2] - m[2][0])/s
-            z = (m[1][0] - m[0][1])/s
+            angle = math.acos(( m.GetElement(0,0) + m.GetElement(1,1) + m.GetElement(2,2) - 1)/2)
+            x = (m.GetElement(2,1) - m.GetElement(1,2))/s
+            y = (m.GetElement(0,2) - m.GetElement(2,0))/s
+            z = (m.GetElement(1,0) - m.GetElement(0,1))/s
             axisAngle = [angle,x,y,z]
         return(axisAngle)
 
 	
 
-    
+    #TODO: make this
+    def onRotateNode(self, caller, upperLimit, lowerLimit, event) -> None:
+        #Notifies when node is moved - make separate for translation and rotation?
+        transformNode = caller
+        newMatrix = vtk.vtkMatrix4x4()
+        transformNode.GetMatrixTransformFromWorld(newMatrix)
+        print(newMatrix)
+        if(self.matrixToAngle(newMatrix)[0] > upperLimit):
+            pass
+            #transformNode #TODO: get back to max position
+        if(self.matrixToAngle(newMatrix)[0] < lowerLimit):
+            pass
+            #transformNode
+
+        #replaces transform value with max value if going above max angle, prints message
+
 
     def process(self, robotPath, meshFolder, scaleIsM, useCollisionMesh) -> None:
         
@@ -481,11 +497,11 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         # TODO: xacro to urdf conversions
         if(pathExt == ".xacro"):
             #robotPath = xacroToUrdf(robotPath)
-            robotFile = open(os.path.basename(robotPath) + '.urdf', "w")
+            robotFile = os.path.basename(robotPath) + '.urdf'
             print("this part completed")
-            robotFile.write(xacro2urdf.runProgram(robotPath))
+            xacro2urdf.runProgram(robotPath, robotFile)
             print("this one done")
-            robotFile.close()
+            #robotFile.close()
             tree = ET.parse(robotFile)
         else:
             tree = ET.parse(robotPath)
@@ -525,12 +541,20 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     pass
                 else:
                     # make the transform interactively editable in 3D views
+                    
                     jointTransformNode.CreateDefaultDisplayNodes()
                     displayNode = jointTransformNode.GetDisplayNode()
                     displayNode.SetEditorVisibility(True)
                     displayNode.SetEditorSliceIntersectionVisibility(False)
                     displayNode.SetEditorTranslationEnabled(False)
                     makeLinks(link, displayNode)
+                    if link.get("type") == "prismatic":
+                        lowerLim = float(setLowerLim(link, "translate"))
+                        upperLim = float(setUpperLim(link, "translate"))
+                    elif link.get("type") == "revolute" or link.get("type") == "continuous":
+                        lowerLim = float(setLowerLim(link, "rotate"))
+                        upperLim = float(setUpperLim(link, "rotate"))
+                    #jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode(jointTransformNode, upperLim, lowerLim, slicer.vtkMRMLTransformNode.TransformModifiedEvent))
                     
         makeNodeHierarchy(nodes, robot)
         connectNodes(nodes, scaleIsM)
