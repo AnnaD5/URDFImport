@@ -158,6 +158,30 @@ def setUpperLim(link, type):
 #for transform, change limits to 1000x because slicer is in mm 
 #this is in radians for rotation and meters for translation
 
+def upperAxang(link):
+    if link.find("limit").get("upper") != None:
+        axang = numpy.zeros(1)
+        axang[0] = link.find("limit").get("upper")
+        print(axang)
+        axang = numpy.append(axang, [float(x) for x in link.find("axis").get("xyz").split()])
+        print(axang)
+        return axang
+    else:
+        return None
+    
+def lowerAxang(link):
+    if link.find("limit").get("lower") != None:
+        axang = numpy.zeros(1)
+        axang[0] = link.find("limit").get("lower")
+        axang = numpy.append(axang, [float(x) for x in link.find("axis").get("xyz").split()])
+        #print(axang)
+        return axang
+    else:
+        return None
+        
+        
+
+
 #def xacroToUrdf():
     #TODO: incorporate code from xacro2urdf github possibly 
 
@@ -317,19 +341,6 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if self.parent.isEntered:
             self.initializeParameterNode()
     
-    """
-    #TODO: make this
-    def onRotateNode(self, caller, upperLimit, lowerLimit, event) -> None:
-        #Notifies when node is moved - make separate for translation and rotation?
-        transformNode = caller
-        angleMoved = transformNode.GetMatrix()
-        if(self.logic.matrixToAngle(angleMoved)[0] > upperLimit):
-            transformNode #TODO: get back to max position
-        if(self.logic.matrixToAngle(angleMoved)[0] < lowerLimit):
-            transformNode
-
-        #replaces transform value with max value if going above max angle, prints message
-    """
     
 
     def initializeParameterNode(self) -> None:
@@ -363,9 +374,6 @@ class URDF_ImportWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.mrmlScene.Clear()
 
     def onLoadButton(self) -> None:
-        #matrix = ([.866, 0.5, 0], [-0.5, 0.866, 0], [0, 0, 1])
-        #axisAngle = self.logic.matrixToAngle(matrix)
-        #print(axisAngle)
         self.logic.process(self.ui.robotFilePath.currentPath, self.ui.meshesDirectoryButton.directory,
                 self.ui.scaleRobotFileM.checked, self.ui.collisionMeshCheck.checked)
     
@@ -386,7 +394,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
     Uses ScriptedLoadableModuleLogic base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
-
+    joints = {}
+    
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
@@ -467,25 +476,117 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             z = (m.GetElement(1,0) - m.GetElement(0,1))/s
             axisAngle = [angle,x,y,z]
         return(axisAngle)
+    
+    #TODO: none of these angular conversions are accurate - add better one
+    def quaternion2matrix(self, quaternion):
+        if quaternion is None:
+            return None
+        a = quaternion[0]
+        b = quaternion[1]
+        c = quaternion[2]
+        d = quaternion[3]
+        m = numpy.array([[1-2*(c*c+d*d),2*b*c-2*a*d,2*a*c+2*b*d],
+                [2*b*c+2*a*d,1-2*(b*b+d*d),2*c*d-2*a*b],
+                [2*b*d-2*a*c,2*a*b+2*c*d,1-2*(b*b+c*c)]],dtype=numpy.float32)
+        return m
 
-	
+
+    def axis2quaternion(self, axis_angle,with_magnitude=False):
+        if axis_angle is None:
+            return None
+        if with_magnitude:
+            angle = numpy.linalg.norm(axis_angle)
+            axis_angle = axis_angle/angle
+        else:
+            angle = axis_angle[3]
+            axis_angle = axis_angle[:3]
+            axis_angle /=numpy.linalg.norm(axis_angle)
+        a = numpy.cos(angle/2)
+        s = numpy.sin(angle/2)
+        b,c,d = axis_angle*s
+        quaternion = numpy.array([a,b,c,d],numpy.float32)
+        return quaternion
+
+    def axis2matrix(self,axis_angle,with_magnitude=False):
+        axis_angle
+        if axis_angle is None:
+            return None
+
+        quaternion = self.axis2quaternion(axis_angle,with_magnitude=with_magnitude)
+        m = self.quaternion2matrix(quaternion)
+        return m
+
+
+    def angleToMatrix(self,axang):
+        """if axang.shape[0] != 4:
+            raise ValueError("axang2rotm: Incorrect vector dimension")"""
+
+        dcm = numpy.zeros((3, 3))
+        u = axang[:3]  # rotation axis vector
+
+        n = numpy.dot(u, u)
+        if n > 1:
+            u = u / numpy.sqrt(n)  # normalize u
+
+        # axis elements
+        u1, u2, u3 = u
+
+        # angles
+        c_t = numpy.cos(axang[3])
+        s_t = numpy.sin(axang[3])
+        vers_t = 1 - c_t  # versine(theta) = 2*sin^2(theta/2)
+
+        # Compute the Direction Cosine Matrix (DCM) by applying the Rodrigues' formula
+        dcm[0, 0] = u1 * u1 * vers_t + c_t
+        dcm[0, 1] = u1 * u2 * vers_t - u3 * s_t
+        dcm[0, 2] = u1 * u3 * vers_t + u2 * s_t
+
+        dcm[1, 0] = u1 * u2 * vers_t + u3 * s_t
+        dcm[1, 1] = u2 * u2 * vers_t + c_t
+        dcm[1, 2] = u2 * u3 * vers_t - u1 * s_t
+
+        dcm[2, 0] = u1 * u3 * vers_t - u2 * s_t
+        dcm[2, 1] = u2 * u3 * vers_t + u1 * s_t
+        dcm[2, 2] = u3 * u3 * vers_t + c_t
+
+        return dcm
+        
 
     #TODO: make this
-    def onRotateNode(self, caller, upperLimit, lowerLimit, event) -> None:
+    def onRotateNode(self, caller, event):
         #Notifies when node is moved - make separate for translation and rotation?
         transformNode = caller
+        nodeName = transformNode.GetName()
+        upperLimit = self.joints[nodeName]["upper"]
+        lowerLimit = self.joints[nodeName]["lower"]
+        print("upper limit for " + nodeName + ":")
+        print(upperLimit)
         newMatrix = vtk.vtkMatrix4x4()
-        transformNode.GetMatrixTransformFromWorld(newMatrix)
+        transformNode.GetMatrixTransformFromParent(newMatrix) 
+        print("transform matrix original")
         print(newMatrix)
         if(self.matrixToAngle(newMatrix)[0] > upperLimit):
-            pass
+            print(self.matrixToAngle(newMatrix)[0])
+            print("Upper limit exceeded")
+            transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
             #transformNode #TODO: get back to max position
+            """TODO: potential implementation 
+            - have default matrix for original position
+            - create matrix for max position from upper/lower limit
+            - transform to that matrix"""
         if(self.matrixToAngle(newMatrix)[0] < lowerLimit):
-            pass
+            print("Lower limit exceeded")
+            transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
             #transformNode
-
+        #TODO: check which transform to change matrix to -- parent to world transform?
         #replaces transform value with max value if going above max angle, prints message
-
+    
+    def onTranslateNode(self, caller, upperLimit, lowerLimit, event):
+        transformNode = caller
+        newMatrix = vtk.vtkMatrix4x4()
+        transformNode.getMatrixTransformFromWorld(newMatrix)
+        print(newMatrix)
+        
 
     def process(self, robotPath, meshFolder, scaleIsM, useCollisionMesh) -> None:
         
@@ -513,6 +614,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             raise ValueError("Invalid URDF file")
         
         nodes = {}
+        
+        
 
         for link in robot:
             name = link.get("name")
@@ -548,13 +651,25 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     displayNode.SetEditorSliceIntersectionVisibility(False)
                     displayNode.SetEditorTranslationEnabled(False)
                     makeLinks(link, displayNode)
+                    """a = [1.0472, 0, 0, 1 ]
+                    print("angle to matrix")
+                    print(self.axis2matrix(a))"""
                     if link.get("type") == "prismatic":
-                        lowerLim = float(setLowerLim(link, "translate"))
-                        upperLim = float(setUpperLim(link, "translate"))
+                        lowerLimit = float(setLowerLim(link, "translate"))
+                        upperLimit = float(setUpperLim(link, "translate"))
+                        self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit}
                     elif link.get("type") == "revolute" or link.get("type") == "continuous":
-                        lowerLim = float(setLowerLim(link, "rotate"))
-                        upperLim = float(setUpperLim(link, "rotate"))
-                    #jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode(jointTransformNode, upperLim, lowerLim, slicer.vtkMRMLTransformNode.TransformModifiedEvent))
+                        lowerLimit = float(setLowerLim(link, "rotate"))
+                        upperLimit = float(setUpperLim(link, "rotate"))
+                        lowerMatrix = self.axis2matrix(lowerAxang(link))
+                        upperMatrix = self.axis2matrix(upperAxang(link))
+                        self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, 
+                                             "upperMatrix": upperMatrix, "lowerMatrix": lowerMatrix}
+                        print("this is the upper matrix")
+                        print(upperMatrix)
+                        print()
+                        jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode)
+                    
                     
         makeNodeHierarchy(nodes, robot)
         connectNodes(nodes, scaleIsM)
