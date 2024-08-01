@@ -164,9 +164,12 @@ def upperAxang(link):
         axang[0] = link.find("limit").get("upper")
         print(axang)
         axang = numpy.append(axang, [float(x) for x in link.find("axis").get("xyz").split()])
+        print("upper axang")
         print(axang)
+        print()
         return axang
     else:
+        print("no upper")
         return None
     
 def lowerAxang(link):
@@ -174,7 +177,7 @@ def lowerAxang(link):
         axang = numpy.zeros(1)
         axang[0] = link.find("limit").get("lower")
         axang = numpy.append(axang, [float(x) for x in link.find("axis").get("xyz").split()])
-        #print(axang)
+        print(axang)
         return axang
     else:
         return None
@@ -477,6 +480,9 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             axisAngle = [angle,x,y,z]
         return(axisAngle)
     
+    def matrixToVTKTransform(self, matrix):
+        matrix = numpy.append()
+
     #TODO: none of these angular conversions are accurate - add better one
     def quaternion2matrix(self, quaternion):
         if quaternion is None:
@@ -485,24 +491,40 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         b = quaternion[1]
         c = quaternion[2]
         d = quaternion[3]
+        print("a")     
+        print(a)
+        print("b")
+        print(b)
+        print(c)
+        print(d)
         m = numpy.array([[1-2*(c*c+d*d),2*b*c-2*a*d,2*a*c+2*b*d],
                 [2*b*c+2*a*d,1-2*(b*b+d*d),2*c*d-2*a*b],
                 [2*b*d-2*a*c,2*a*b+2*c*d,1-2*(b*b+c*c)]],dtype=numpy.float32)
+        print(m)
         return m
 
 
     def axis2quaternion(self, axis_angle,with_magnitude=False):
         if axis_angle is None:
+            print("no axis angle")
             return None
         if with_magnitude:
             angle = numpy.linalg.norm(axis_angle)
             axis_angle = axis_angle/angle
         else:
             angle = axis_angle[3]
+            print("line 513")
+            print(angle)
             axis_angle = axis_angle[:3]
+            print("line 516")
+            print(axis_angle)
             axis_angle /=numpy.linalg.norm(axis_angle)
+            print(" axis angle normalization")
+            print(axis_angle)
         a = numpy.cos(angle/2)
+        print(a)
         s = numpy.sin(angle/2)
+        print(s)
         b,c,d = axis_angle*s
         quaternion = numpy.array([a,b,c,d],numpy.float32)
         return quaternion
@@ -510,30 +532,38 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
     def axis2matrix(self,axis_angle,with_magnitude=False):
         axis_angle
         if axis_angle is None:
+            print("no axis angle")
             return None
 
         quaternion = self.axis2quaternion(axis_angle,with_magnitude=with_magnitude)
+        print(quaternion)
         m = self.quaternion2matrix(quaternion)
         return m
 
 
     def angleToMatrix(self,axang):
-        """if axang.shape[0] != 4:
-            raise ValueError("axang2rotm: Incorrect vector dimension")"""
 
         dcm = numpy.zeros((3, 3))
         u = axang[:3]  # rotation axis vector
+        print("u is")
+        print(u)
 
         n = numpy.dot(u, u)
         if n > 1:
             u = u / numpy.sqrt(n)  # normalize u
+            print("u normalized")
+            print(u)
 
         # axis elements
         u1, u2, u3 = u
 
         # angles
-        c_t = numpy.cos(axang[3])
-        s_t = numpy.sin(axang[3])
+        print("starting angles")
+        print(axang[0])
+        c_t = numpy.cos(axang[0])
+        print("c_t")
+        print(c_t)
+        s_t = numpy.sin(axang[0])
         vers_t = 1 - c_t  # versine(theta) = 2*sin^2(theta/2)
 
         # Compute the Direction Cosine Matrix (DCM) by applying the Rodrigues' formula
@@ -548,6 +578,9 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         dcm[2, 0] = u1 * u3 * vers_t - u2 * s_t
         dcm[2, 1] = u2 * u3 * vers_t + u1 * s_t
         dcm[2, 2] = u3 * u3 * vers_t + c_t
+        print("dcm")
+        print(dcm)
+        print()
 
         return dcm
         
@@ -565,11 +598,22 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         transformNode.GetMatrixTransformFromParent(newMatrix) 
         print("transform matrix original")
         print(newMatrix)
+
+        print("upper matrix")
+        print(self.joints[nodeName]["upperMatrix"])
+        print()
+
+        print("lower matrix")
+        print(self.joints[nodeName]["upperMatrix"])
+        print()
+        #upperVTK = vtk.vtkMatrix4x4()
+        #upperMatrix = numpy.append(self.joints[nodeName]["upperMatrix"], [0.00,0.00])
+        #lowerVTK = vtk.vtkMatrix4x4()
         if(self.matrixToAngle(newMatrix)[0] > upperLimit):
             print(self.matrixToAngle(newMatrix)[0])
             print("Upper limit exceeded")
             transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
-            #transformNode #TODO: get back to max position
+            #TODO: get back to max position
             """TODO: potential implementation 
             - have default matrix for original position
             - create matrix for max position from upper/lower limit
@@ -661,12 +705,17 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     elif link.get("type") == "revolute" or link.get("type") == "continuous":
                         lowerLimit = float(setLowerLim(link, "rotate"))
                         upperLimit = float(setUpperLim(link, "rotate"))
-                        lowerMatrix = self.axis2matrix(lowerAxang(link))
-                        upperMatrix = self.axis2matrix(upperAxang(link))
+
+                        lowerMatrix = self.angleToMatrix(lowerAxang(link))
+                        upperMatrix = self.angleToMatrix(upperAxang(link))
                         self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, 
                                              "upperMatrix": upperMatrix, "lowerMatrix": lowerMatrix}
                         print("this is the upper matrix")
                         print(upperMatrix)
+                        print()
+
+                        print("this is the lower matrix")
+                        print(lowerMatrix)
                         print()
                         jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode)
                     
