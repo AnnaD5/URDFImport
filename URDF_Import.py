@@ -485,7 +485,7 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             y = (m.GetElement(0,2) - m.GetElement(2,0))/s
             z = (m.GetElement(1,0) - m.GetElement(0,1))/s
             axisAngle = [angle,x,y,z]
-       # print(axisAngle)
+
         return(axisAngle)
     
 
@@ -497,16 +497,10 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         b = quaternion[1]
         c = quaternion[2]
         d = quaternion[3]
-        """print("a")     
-        print(a)
-        print("b")
-        print(b)
-        print(c)
-        print(d)"""
+
         m = numpy.array([[1-2*(c*c+d*d),2*b*c-2*a*d,2*a*c+2*b*d,0.00],
                 [2*b*c+2*a*d,1-2*(b*b+d*d),2*c*d-2*a*b,0.00],
                 [2*b*d-2*a*c,2*a*b+2*c*d,1-2*(b*b+c*c),0.00],[0.00, 0.00, 0.00, 1.00]],dtype=numpy.float32)
-        print(m)
         return m
 
 
@@ -537,6 +531,16 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         
         return m
 
+    def matrixFromTranslate(self, translate, link):
+        axis = [float(x) for x in link.find("axis").get("xyz").split()]
+        matrix = vtk.vtkMatrix4x4()
+        if(axis[0] == 1.0):
+            matrix.SetElement(3, 0, translate)
+        elif(axis[1] == 1.0):
+            matrix.SetElement(3, 1, translate)
+        else:
+            matrix.SetElement(3, 2, translate)
+        return matrix
 
     #TODO: make this
     def onRotateNode(self, caller, event):
@@ -577,16 +581,33 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         nodeName = transformNode.GetName()
         upperLimit = self.joints[nodeName]["upper"]
         lowerLimit = self.joints[nodeName]["lower"]
+        originX = self.joints[nodeName]["originX"]
+        originY = self.joints[nodeName]["originY"]
+        originZ = self.joints[nodeName]["originZ"]
         newMatrix = vtk.vtkMatrix4x4()
         transformNode.getMatrixTransformFromWorld(newMatrix)
         print(newMatrix)
-        print("upper matrix for" + nodeName)
+        translatedAmount = 0
+        if(newMatrix.GetElement(3,0) != originX):
+            translatedAmount = newMatrix.GetElement(3,0)
+        elif(newMatrix.GetElement(3,1) != originY):
+            translatedAmount = newMatrix.GetElement(3,1)
+        elif(newMatrix.GetElement(3,2) != originZ):
+            translatedAmount = newMatrix.GetElement(3,2)
+        
+        if(translatedAmount > upperLimit):
+            print("At upper limit")
+            transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
+        if(translatedAmount < lowerLimit):
+            print("At lower limit")
+            transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
+        """print("upper matrix for" + nodeName)
         print(self.joints[nodeName]["upperMatrix"])
         print()
 
         print("lower matrix for" + nodeName)
         print(self.joints[nodeName]["lowerMatrix"])
-        print()
+        print()"""
         
     def arrayToVTKMatrix(self, array):
         matrix = vtk.vtkMatrix4x4()
@@ -658,30 +679,28 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     makeLinks(link, displayNode)
 
                     if link.get("type") == "prismatic":
-                        #lowerLimit = setLowerLim(link, "translate")
-                        #upperLimit = setUpperLim(link, "translate")
-                        #self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit}
+                        lowerLimit = setLowerLim(link, "translate")
+                        upperLimit = setUpperLim(link, "translate")
+
+                        originX = link.find("visual").find("origin").get("xyz").split()[0]
+                        originY = link.find("visual").find("origin").get("xyz").split()[1]
+                        originZ = link.find("visual").find("origin").get("xyz").split()[2]
+
+                        lowerMatrix = self.matrixFromTranslate(lowerLimit, link)
+                        upperMatrix = self.matrixFromTranslate(upperLimit, link)
+                        self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, "originX" : originX,
+                                             "originY" : originY, "originZ": originZ}
                         #jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
                         pass
                     elif link.get("type") == "revolute" or link.get("type") == "continuous":
-                        #print("values for" + name)
                         
                         lowerLimit = setLowerLim(link, "rotate")
-                       # print(lowerLimit)
                         upperLimit = setUpperLim(link, "rotate")
-                      #  print(upperLimit)
 
                         lowerMatrix = self.arrayToVTKMatrix(self.axis2matrix(lowerAxang(link)))
                         upperMatrix = self.arrayToVTKMatrix(self.axis2matrix(upperAxang(link)))
                         self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, 
                                              "upperMatrix": upperMatrix, "lowerMatrix": lowerMatrix}
-                        """print("this is the upper matrix")
-                        print(upperMatrix)
-                        print()
-
-                        print("this is the lower matrix")
-                        print(lowerMatrix)
-                        print()"""
                         jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onRotateNode)
                     
         makeNodeHierarchy(nodes, robot)
