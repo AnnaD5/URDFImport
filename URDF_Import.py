@@ -142,9 +142,6 @@ def makeNodeHierarchy(nodes, robot):
 def setLowerLim(link, type):
     l = link.find("limit").get("lower")
     if l != None:
-        if type == "translate":
-            return float(l) * 1000
-        else:
             return float(l)
     else:
         return None
@@ -153,15 +150,9 @@ def setLowerLim(link, type):
 def setUpperLim(link, type):
     u = link.find("limit").get("upper")
     if u != None:
-        if type == "translate":
-            return float(u) * 1000
-        else:
-            """if(float(u) < 0):
-                u = float(u) + 6.28318530718"""
             return float(u)
     else:
         return None
-#for transform, change limits to 1000x because slicer is in mm 
 #this is in radians for rotation and meters for translation
 
 #Converts upper limits (radians) for rotation around an axis into axis angles
@@ -578,7 +569,7 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         originY = self.joints[nodeName]["originY"]
         originZ = self.joints[nodeName]["originZ"]
         newMatrix = vtk.vtkMatrix4x4()
-        transformNode.getMatrixTransformFromWorld(newMatrix)
+        transformNode.GetMatrixTransformFromWorld(newMatrix) #should this be parent or world?
         print(newMatrix)
         translatedAmount = 0
         if(newMatrix.GetElement(3,0) != originX):
@@ -672,16 +663,17 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                         lowerLimit = setLowerLim(link, "translate")
                         upperLimit = setUpperLim(link, "translate")
 
-                        originX = link.find("visual").find("origin").get("xyz").split()[0]
-                        originY = link.find("visual").find("origin").get("xyz").split()[1]
-                        originZ = link.find("visual").find("origin").get("xyz").split()[2]
+                        originX = link.find("origin").get("xyz").split()[0]
+                        originY = link.find("origin").get("xyz").split()[1]
+                        originZ = link.find("origin").get("xyz").split()[2]
 
                         lowerMatrix = self.matrixFromTranslate(lowerLimit, link)
                         upperMatrix = self.matrixFromTranslate(upperLimit, link)
                         self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, "originX" : originX,
-                                             "originY" : originY, "originZ": originZ}
-                        jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
-                        pass
+                                             "originY" : originY, "originZ": originZ, "lowerMatrix": lowerMatrix,
+                                             "upperMatrix": upperMatrix}
+                        #jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
+                        
                     #sets rotation limits for rotational joints
                     elif link.get("type") == "revolute" or link.get("type") == "continuous":
                         
