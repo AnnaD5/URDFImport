@@ -137,18 +137,19 @@ def makeNodeHierarchy(nodes, robot):
             childModelNode = child["model"]
             childModelNode.SetAndObserveTransformNodeID(nodes[name]["transform"].GetID())
 
+
+#Sets lower limits on joint movement
 def setLowerLim(link, type):
     l = link.find("limit").get("lower")
     if l != None:
         if type == "translate":
             return float(l) * 1000
         else:
-            """if(float(l) < 0):
-                l = float(l) + 6.28318530718"""
             return float(l)
     else:
         return None
 
+#Sets upper limits on joint movement
 def setUpperLim(link, type):
     u = link.find("limit").get("upper")
     if u != None:
@@ -163,6 +164,7 @@ def setUpperLim(link, type):
 #for transform, change limits to 1000x because slicer is in mm 
 #this is in radians for rotation and meters for translation
 
+#Converts upper limits (radians) for rotation around an axis into axis angles
 def upperAxang(link):
     if link.find("limit").get("upper") != None:
         axang = numpy.zeros(1)
@@ -176,7 +178,8 @@ def upperAxang(link):
     else:
         print("no upper")
         return None
-    
+
+#Converts lower limits (radians) for rotation around an axis into axis angles
 def lowerAxang(link):
     if link.find("limit").get("lower") != None:
         axang = numpy.zeros(1)
@@ -191,12 +194,7 @@ def lowerAxang(link):
 def makeAxang(link, limit):
     axang = [limit, [float(x) for x in link.find("axis").get("xyz").split()]]
         
-        
-
-
-#def xacroToUrdf():
-    #TODO: incorporate code from xacro2urdf github possibly 
-
+#Creates transform node visibility for joints based on axis of translation/rotation and joint type
 def makeLinks(link, node):
     if not link.get("type") == "floating":
         if(link.find("axis") == None):
@@ -205,8 +203,6 @@ def makeLinks(link, node):
             axis = [float(x) for x in link.find("axis").get("xyz").split()]
     if link.get("type") == "revolute":
         #<axis xyz="0 0 1"/>
-        #rotationAxis = [float(x) for x in link.find("axis").get("xyz").split()]
-        #TODO: use limits for observer nodes
 
         if axis == [1, 0, 0] or axis == [-1, 0, 0]:
             node.SetRotationHandleComponentVisibility3D(True, False, False, False)
@@ -489,7 +485,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         return(axisAngle)
     
 
-    #TODO: make this into a 4x4 array for conversion
+    # converts quaternion to transform matrix representation
+    #code from https://github.com/li-xl/rotationconverter/tree/master, modified to create 4 by 4 transform matrix
     def quaternion2matrix(self, quaternion):
         if quaternion is None:
             return None
@@ -503,7 +500,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                 [2*b*d-2*a*c,2*a*b+2*c*d,1-2*(b*b+c*c),0.00],[0.00, 0.00, 0.00, 1.00]],dtype=numpy.float32)
         return m
 
-
+    # converts axis angle to quarternion representation
+    # code from https://github.com/li-xl/rotationconverter/tree/master
     def axis2quaternion(self, axis_angle,with_magnitude=False):
         if axis_angle is None:
             print("no axis angle")
@@ -521,6 +519,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         quaternion = numpy.array([a,b,c,d],numpy.float32)
         return quaternion
 
+    # converts axis angle to matrix representation
+    # code from https://github.com/li-xl/rotationconverter/tree/master
     def axis2matrix(self,axis_angle,with_magnitude=False):
         axis_angle
         if axis_angle is None:
@@ -531,6 +531,7 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         
         return m
 
+    #Makes identity matrix modified for translation along axis
     def matrixFromTranslate(self, translate, link):
         axis = [float(x) for x in link.find("axis").get("xyz").split()]
         matrix = vtk.vtkMatrix4x4()
@@ -542,9 +543,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             matrix.SetElement(3, 2, translate)
         return matrix
 
-    #TODO: make this
+    #Method for transform observer with rotational nodes; sets and uses limits from URDF
     def onRotateNode(self, caller, event):
-        #Notifies when node is moved - make separate for translation and rotation?
         transformNode = caller
         nodeName = transformNode.GetName()
         upperLimit = self.joints[nodeName]["upper"]
@@ -567,15 +567,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     
                 print("At lower limit 2")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
-                #TODO: get back to max position
-                """TODO: potential implementation 
-                - have default matrix for original position
-                - create matrix for max position from upper/lower limit
-                - transform to that matrix"""
-                #transformNode
-            #TODO: check which transform to change matrix to -- parent to world transform?
-            #replaces transform value with max value if going above max angle, prints message
-        
+
+    #Method for transform observer with translation; sets and uses limits from URDF  
     def onTranslateNode(self, caller, event):
         transformNode = caller
         nodeName = transformNode.GetName()
@@ -601,14 +594,8 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         if(translatedAmount < lowerLimit):
             print("At lower limit")
             transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
-        """print("upper matrix for" + nodeName)
-        print(self.joints[nodeName]["upperMatrix"])
-        print()
 
-        print("lower matrix for" + nodeName)
-        print(self.joints[nodeName]["lowerMatrix"])
-        print()"""
-        
+    #Converts arrays from 3 by 3 transform matrices to 4x4 vtk matrices   
     def arrayToVTKMatrix(self, array):
         matrix = vtk.vtkMatrix4x4()
         for i in range (4):
@@ -616,6 +603,7 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                 matrix.SetElement(i, j, array[i][j])
         return matrix
 
+    #Importer process on "load" button
     def process(self, robotPath, meshFolder, scaleIsM, useCollisionMesh) -> None:
         
         import SampleData
@@ -624,17 +612,18 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         
         pathExt = pathlib.Path(robotPath).suffix #find suffix to tell if file is URDF or xacro
         # TODO: xacro to urdf conversions
-        if(pathExt == ".xacro"):
-            #robotPath = xacroToUrdf(robotPath)
+        """ if(pathExt == ".xacro"):
+            robotPath = xacroToUrdf(robotPath)
             robotFile = os.path.basename(robotPath) + '.urdf'
             xacro2urdf.runProgram(robotPath, robotFile)
-            #robotFile.close()
+            robotFile.close()
             tree = ET.parse(robotFile)
         else:
-            tree = ET.parse(robotPath)
+            tree = ET.parse(robotPath)"""
+        
         # Parse robot description file   
         # Parse XML data from a file
-        
+        tree = ET.parse(robotPath)
         robot = tree.getroot()
         if robot.tag != "robot":
             raise ValueError("Invalid URDF file")
@@ -678,6 +667,7 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                     displayNode.SetEditorTranslationEnabled(False)
                     makeLinks(link, displayNode)
 
+                    #sets translate limits for prismatic joints
                     if link.get("type") == "prismatic":
                         lowerLimit = setLowerLim(link, "translate")
                         upperLimit = setUpperLim(link, "translate")
@@ -690,8 +680,9 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                         upperMatrix = self.matrixFromTranslate(upperLimit, link)
                         self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, "originX" : originX,
                                              "originY" : originY, "originZ": originZ}
-                        #jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
+                        jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
                         pass
+                    #sets rotation limits for rotational joints
                     elif link.get("type") == "revolute" or link.get("type") == "continuous":
                         
                         lowerLimit = setLowerLim(link, "rotate")
