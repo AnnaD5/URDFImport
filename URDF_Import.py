@@ -527,11 +527,11 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         axis = [float(x) for x in link.find("axis").get("xyz").split()]
         matrix = vtk.vtkMatrix4x4()
         if(axis[0] == 1.0):
-            matrix.SetElement(3, 0, translate)
+            matrix.SetElement(0, 3, translate)
         elif(axis[1] == 1.0):
-            matrix.SetElement(3, 1, translate)
+            matrix.SetElement(1, 3, translate)
         else:
-            matrix.SetElement(3, 2, translate)
+            matrix.SetElement(2, 3, translate)
         return matrix
 
     #Method for transform observer with rotational nodes; sets and uses limits from URDF
@@ -541,22 +541,22 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         upperLimit = self.joints[nodeName]["upper"]
         lowerLimit = self.joints[nodeName]["lower"]
         newMatrix = vtk.vtkMatrix4x4()
-        transformNode.GetMatrixTransformFromParent(newMatrix) 
+        transformNode.GetMatrixTransformFromParent(newMatrix)             
         angleRep = self.matrixToAngle(newMatrix)
         angleRep[0] = round(angleRep[0], 3)
         if(angleRep[1] == 1 or angleRep[2] == 1 or angleRep[3] == 1):
             newAngle = -angleRep[0]
             newAngle = round(newAngle, 3)
             if(newAngle < lowerLimit):
-                #print("At lower limit")
+                print("At lower limit")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
         else:
             if(angleRep[0] > upperLimit):
-                #print("At upper limit")
+                print("At upper rotation limit")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
             if(angleRep[0] < lowerLimit):
                     
-                print("At lower limit 2")
+                print("At lower rotation limit")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
 
     #Method for transform observer with translation; sets and uses limits from URDF  
@@ -568,22 +568,46 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
         originX = self.joints[nodeName]["originX"]
         originY = self.joints[nodeName]["originY"]
         originZ = self.joints[nodeName]["originZ"]
+        axis = self.joints[nodeName]["axis"]
         newMatrix = vtk.vtkMatrix4x4()
-        transformNode.GetMatrixTransformFromWorld(newMatrix) #should this be parent or world?
-        print(newMatrix)
+        transformNode.GetMatrixTransformFromParent(newMatrix)
         translatedAmount = 0
-        if(newMatrix.GetElement(3,0) != originX):
-            translatedAmount = newMatrix.GetElement(3,0)
-        elif(newMatrix.GetElement(3,1) != originY):
-            translatedAmount = newMatrix.GetElement(3,1)
-        elif(newMatrix.GetElement(3,2) != originZ):
-            translatedAmount = newMatrix.GetElement(3,2)
-        
+        if(axis == [1, 0, 0]):
+            translatedAmount = -newMatrix.GetElement(0,3)
+            if(newMatrix.GetElement(0,3) != originX):
+                #translatedAmount /= 1000
+                pass
+        elif(axis == [0, 1, 0]):
+            translatedAmount = -newMatrix.GetElement(1,3)
+            if(newMatrix.GetElement(1,3) != originY):
+                #translatedAmount /= 1000
+                pass
+        elif(axis == [0, 0, 1]):
+            translatedAmount = -newMatrix.GetElement(2,3)
+            if(newMatrix.GetElement(2,3) != originZ):
+               # translatedAmount /= 1000
+                pass
+        elif(axis == [-1, 0, 0]):
+            translatedAmount = newMatrix.GetElement(0,3)
+            if(newMatrix.GetElement(0,3) != originX):
+                #translatedAmount /= 1000
+                pass
+        elif(axis == [0, -1, 0]):
+            translatedAmount = newMatrix.GetElement(1,3)
+            if(newMatrix.GetElement(1,3) != originY):
+               # translatedAmount /= 1000
+                pass
+        elif(axis == [0, 0, -1]):
+            translatedAmount = newMatrix.GetElement(2,3)
+            if(newMatrix.GetElement(2,3) != originZ):
+                #translatedAmount /= 1000
+                pass
+        translatedAmount = round(translatedAmount, 3)
         if(translatedAmount > upperLimit):
-            print("At upper limit")
+            print("At upper translation limit")
             transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
         if(translatedAmount < lowerLimit):
-            print("At lower limit")
+            print("At lower translation limit")
             transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
 
     #Converts arrays from 3 by 3 transform matrices to 4x4 vtk matrices   
@@ -663,16 +687,19 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                         lowerLimit = setLowerLim(link, "translate")
                         upperLimit = setUpperLim(link, "translate")
 
-                        originX = link.find("origin").get("xyz").split()[0]
-                        originY = link.find("origin").get("xyz").split()[1]
-                        originZ = link.find("origin").get("xyz").split()[2]
-
+                        originX = float(link.find("origin").get("xyz").split()[0])
+                        originY = float(link.find("origin").get("xyz").split()[1])
+                        originZ = float(link.find("origin").get("xyz").split()[2])
+                        jointAxis = link.find("axis").get("xyz").split()
+                        jointAxis[0] = float(jointAxis[0])
+                        jointAxis[1] = float(jointAxis[1])
+                        jointAxis[2] = float(jointAxis[2])
                         lowerMatrix = self.matrixFromTranslate(lowerLimit, link)
                         upperMatrix = self.matrixFromTranslate(upperLimit, link)
                         self.joints[name] = {"upper": upperLimit, "lower" : lowerLimit, "originX" : originX,
                                              "originY" : originY, "originZ": originZ, "lowerMatrix": lowerMatrix,
-                                             "upperMatrix": upperMatrix}
-                        #jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
+                                             "upperMatrix": upperMatrix, "axis": jointAxis}
+                        jointTransformNode.AddObserver(slicer.vtkMRMLTransformNode.TransformModifiedEvent, self.onTranslateNode)
                         
                     #sets rotation limits for rotational joints
                     elif link.get("type") == "revolute" or link.get("type") == "continuous":
