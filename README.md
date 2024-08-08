@@ -7,4 +7,4 @@ Rotation representation conversion from https://github.com/li-xl/rotationconvert
 
 # Future Directions
 Finish addition of xacro to urdf converter,
-add rotation and translation selection sliders in module for more accuracy
+add rotation and translation selection sliders in module for more accuracy, fully implement translate limits for mm (rotation limits fully functional and translate limits functional for m)
