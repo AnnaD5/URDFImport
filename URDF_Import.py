@@ -25,8 +25,7 @@ from slicer import vtkMRMLScalarVolumeNode
 # URDF_Import
 #
 
-#TODO: ask about incorporating URDF to XACRO with someone else's script - what credit is necessary
-#TODO: go through xacro2urdf code and see how to remove the package//: in the new files - maybe look for filename
+#TODO: complete xacro2urdf implementation, add tracking components for rotation/translation in module for more accuracy
 
 class URDF_Import(ScriptedLoadableModule):
     """Uses ScriptedLoadableModule base class, available at:
@@ -548,18 +547,19 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
             newAngle = -angleRep[0]
             newAngle = round(newAngle, 3)
             if(newAngle < lowerLimit):
-                print("At lower limit")
+                #print("At lower rotation limit")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
         else:
             if(angleRep[0] > upperLimit):
-                print("At upper rotation limit")
+               # print("At upper rotation limit")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
             if(angleRep[0] < lowerLimit):
                     
-                print("At lower rotation limit")
+                #print("At lower rotation limit")
                 transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
 
     #Method for transform observer with translation; sets and uses limits from URDF  
+    #Note: currently only for meter scaling
     def onTranslateNode(self, caller, event):
         transformNode = caller
         nodeName = transformNode.GetName()
@@ -604,10 +604,10 @@ class URDF_ImportLogic(ScriptedLoadableModuleLogic):
                 pass
         translatedAmount = round(translatedAmount, 3)
         if(translatedAmount > upperLimit):
-            print("At upper translation limit")
+            #print("At upper translation limit")
             transformNode.SetMatrixTransformToParent(self.joints[nodeName]["upperMatrix"])
         if(translatedAmount < lowerLimit):
-            print("At lower translation limit")
+           # print("At lower translation limit")
             transformNode.SetMatrixTransformToParent(self.joints[nodeName]["lowerMatrix"])
 
     #Converts arrays from 3 by 3 transform matrices to 4x4 vtk matrices   
