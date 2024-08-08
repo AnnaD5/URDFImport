@@ -6,5 +6,5 @@ Extended from [https://gist.github.com/lassoan/e174e853cd78ad93a1cd54b32debdac8]
 Rotation representation conversion from https://github.com/li-xl/rotationconverter/tree/master and https://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToAngle/ (converted to python).
 
 # Future Directions
-Finish addition of xacro to urdf converter
-Add rotation and translation selection sliders in module for more accuracy
+Finish addition of xacro to urdf converter,
+add rotation and translation selection sliders in module for more accuracy
